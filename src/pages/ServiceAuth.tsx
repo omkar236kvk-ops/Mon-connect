@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import VantaBackground from "../components/VantaBackground";
 import "./ServiceAuth.css";
-import { ACTIVE_WALLET_KEY, getProvider, hasNFT, mintNFTAndWait, ORGANIZER_NFT_ADDRESS, SERVICE_PROVIDER_NFT_ADDRESS, requestWalletAccounts } from '../utils/nft';
+import { getProvider, hasNFT, mintNFTAndWait, ORGANIZER_NFT_ADDRESS, SERVICE_PROVIDER_NFT_ADDRESS, requestWalletAccounts, WALLET_SESSION_KEYS } from '../utils/nft';
 import { useNavigate } from 'react-router-dom';
 
 // Monad Testnet Configuration
@@ -56,13 +56,11 @@ const ServiceAuth: React.FC = () => {
       setAccount(null);
       setAvailableAccounts([]);
       setSelectedAccount('');
-      sessionStorage.removeItem(ACTIVE_WALLET_KEY);
       setError("Please connect to MetaMask");
     } else {
       setAccount(null);
       setAvailableAccounts([]);
       setSelectedAccount('');
-      sessionStorage.removeItem(ACTIVE_WALLET_KEY);
       setError('Wallet accounts changed. Connect again and choose the service-provider account.');
     }
   };
@@ -147,12 +145,11 @@ const ServiceAuth: React.FC = () => {
       const ownsServiceProvider = await hasNFT(provider, selectedAccount, SERVICE_PROVIDER_NFT_ADDRESS);
       const ownsOrganizer = await hasNFT(provider, selectedAccount, ORGANIZER_NFT_ADDRESS);
       if (ownsOrganizer) {
-        sessionStorage.removeItem(ACTIVE_WALLET_KEY);
         setError('This account is registered as an organizer. Choose a different MetaMask account for the service-provider role.');
         return;
       }
 
-      sessionStorage.setItem(ACTIVE_WALLET_KEY, selectedAccount);
+      sessionStorage.setItem(WALLET_SESSION_KEYS.serviceProvider, selectedAccount);
       setAccount(selectedAccount);
       if (ownsServiceProvider) {
         navigate('/service-dashboard');
@@ -171,7 +168,7 @@ const ServiceAuth: React.FC = () => {
     setAccount(null);
     setAvailableAccounts([]);
     setSelectedAccount('');
-    sessionStorage.removeItem(ACTIVE_WALLET_KEY);
+    sessionStorage.removeItem(WALLET_SESSION_KEYS.serviceProvider);
     setError(null);
   };
 

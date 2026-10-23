@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { ethers } from 'ethers';
 import { useNavigate } from 'react-router-dom';
 import VantaBackground from '../components/VantaBackground';
-import { ACTIVE_WALLET_KEY, getProvider, ORGANIZER_NFT_ADDRESS } from '../utils/nft';
+import { getProvider, ORGANIZER_NFT_ADDRESS, WALLET_SESSION_KEYS } from '../utils/nft';
 import { ESCROW_ABI, ESCROW_CONTRACT_ADDRESS, ORGANIZER_FEE_RATE } from '../utils/escrow';
 import { CHAIN_CONNECT_V2_ADDRESS, CHAIN_CONNECT_V2_ABI } from '../utils/chainConnectV2';
 import EscrowAndPayments from './EscrowAndPayments';
@@ -63,7 +63,7 @@ const OrganizerDashboard: React.FC = () => {
       const provider = getProvider();
       if (provider) {
         try {
-          const selectedAddress = sessionStorage.getItem(ACTIVE_WALLET_KEY);
+          const selectedAddress = sessionStorage.getItem(WALLET_SESSION_KEYS.organizer);
           if (!selectedAddress) {
             navigate('/', { replace: true });
             return;
@@ -76,26 +76,8 @@ const OrganizerDashboard: React.FC = () => {
         }
       }
 
-        const handleAccountsChanged = (accounts: string[]) => {
-          const selectedAddress = sessionStorage.getItem(ACTIVE_WALLET_KEY);
-          if (!selectedAddress || !accounts.some((wallet) => wallet.toLowerCase() === selectedAddress.toLowerCase())) {
-            sessionStorage.removeItem(ACTIVE_WALLET_KEY);
-            setAccount('');
-            navigate('/', { replace: true });
-          }
-        };
-
-        window.ethereum?.on('accountsChanged', handleAccountsChanged);
-        return () => window.ethereum?.removeListener('accountsChanged', handleAccountsChanged);
     };
     loadAccount();
-
-    const handleAccountsChanged = (accounts: string[]) => {
-      setAccount(accounts[0] || '');
-    };
-
-    window.ethereum?.on('accountsChanged', handleAccountsChanged);
-    return () => window.ethereum?.removeListener('accountsChanged', handleAccountsChanged);
   }, [navigate]);
 
   // Load vendors from blockchain
@@ -365,13 +347,32 @@ const OrganizerDashboard: React.FC = () => {
 
       // Get organizer address
       const provider = await getProvider();
+      if (!provider) throw new Error('MetaMask provider is unavailable. Reconnect your organizer wallet.');
+
+      const authorizedAccounts: string[] = await window.ethereum?.request({ method: 'eth_accounts' }) || [];
+      if (!authorizedAccounts.some((wallet) => wallet.toLowerCase() === account.toLowerCase())) {
+        throw new Error(`MetaMask is not exposing the selected organizer wallet ${account}. Select that account in MetaMask and retry.`);
+      }
+
       const signer = await provider.getSigner(account);
       const organizerAddress = await signer.getAddress();
+      if (organizerAddress.toLowerCase() !== account.toLowerCase()) {
+        throw new Error(`Connected signer ${organizerAddress} does not match the selected organizer wallet ${account}.`);
+      }
 
       // Check if vendor and organizer are the same
       if (vendorAddress.toLowerCase() === organizerAddress.toLowerCase()) {
         alert('Error: Vendor cannot be the same as organizer. Please use a different wallet address for the vendor.');
         return;
+      }
+
+      const escrowReadContract = new ethers.Contract(ESCROW_CONTRACT_ADDRESS, ESCROW_ABI, provider);
+      const vendorProfile = await escrowReadContract.getVendorProfile(vendorAddress);
+      if (vendorProfile.walletAddress.toLowerCase() !== vendorAddress.toLowerCase()) {
+        throw new Error(`Vendor wallet ${vendorAddress} is not registered as a service provider. Register this wallet before funding a job.`);
+      }
+      if (!vendorProfile.isActive) {
+        throw new Error(`Service-provider wallet ${vendorAddress} is inactive. Ask the provider to activate their profile before funding.`);
       }
 
       const jobAmount = ethers.parseEther(hireFormData.jobAmount);
@@ -476,6 +477,8 @@ const OrganizerDashboard: React.FC = () => {
         alert('Invalid vendor address format. Please enter a valid Ethereum address (0x...)');
       } else if (error.message && error.message.includes('Organizer cannot be vendor')) {
         alert('Error: Vendor cannot be the same as organizer. Please use a different wallet address for the vendor.');
+      } else if (error.message && (error.message.includes('not exposing the selected organizer wallet') || error.message.includes('does not match the selected organizer wallet') || error.message.includes('not registered as a service provider') || error.message.includes('Service-provider wallet'))) {
+        alert(error.message);
       } else {
         alert('Failed to create escrow. Error: ' + (error.message || error.toString()));
       }

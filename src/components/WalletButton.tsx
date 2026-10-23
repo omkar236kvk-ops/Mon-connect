@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { ethers } from 'ethers';
-import { ACTIVE_WALLET_KEY, getProvider } from '../utils/nft';
+import { getProvider, WALLET_SESSION_KEYS } from '../utils/nft';
 import { FaWallet, FaSignOutAlt } from 'react-icons/fa';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 
 interface WalletButtonProps {
   account: string;
@@ -11,6 +11,10 @@ interface WalletButtonProps {
 
 const WalletButton: React.FC<WalletButtonProps> = ({ account, onDisconnect }) => {
   const navigate = useNavigate();
+  const location = useLocation();
+  const sessionKey = location.pathname.startsWith('/organizer-dashboard')
+    ? WALLET_SESSION_KEYS.organizer
+    : WALLET_SESSION_KEYS.serviceProvider;
   const [showPopup, setShowPopup] = useState(false);
   const [balance, setBalance] = useState<string>('0.00');
   const [loading, setLoading] = useState(false);
@@ -39,18 +43,9 @@ const WalletButton: React.FC<WalletButtonProps> = ({ account, onDisconnect }) =>
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [account, showPopup]);
 
-  const handleDisconnect = async () => {
+  const handleDisconnect = () => {
     setShowPopup(false);
-    sessionStorage.removeItem(ACTIVE_WALLET_KEY);
-
-    try {
-      await window.ethereum?.request({
-        method: 'wallet_revokePermissions',
-        params: [{ eth_accounts: {} }],
-      });
-    } catch (error) {
-      console.info('Wallet permission revocation is unavailable; clearing the app session instead.', error);
-    }
+    sessionStorage.removeItem(sessionKey);
 
     if (onDisconnect) {
       onDisconnect();

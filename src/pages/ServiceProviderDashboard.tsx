@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { ethers } from 'ethers';
 import VantaBackground from '../components/VantaBackground';
 import WalletButton from '../components/WalletButton';
-import { ACTIVE_WALLET_KEY, getProvider, SERVICE_PROVIDER_NFT_ADDRESS } from '../utils/nft';
+import { getProvider, SERVICE_PROVIDER_NFT_ADDRESS, WALLET_SESSION_KEYS } from '../utils/nft';
 import { CHAIN_CONNECT_V2_ADDRESS, CHAIN_CONNECT_V2_ABI } from '../utils/chainConnectV2';
 import ServiceProviderEscrow from './ServiceProviderEscrow';
 import { FaHourglassHalf, FaSave, FaFileAlt, FaCheckCircle, FaTimesCircle, FaMoneyBillWave, FaChartBar } from 'react-icons/fa';
@@ -95,7 +95,7 @@ const ServiceProviderDashboard: React.FC = () => {
     const provider = getProvider();
     if (provider) {
       try {
-        const selectedAddress = sessionStorage.getItem(ACTIVE_WALLET_KEY);
+        const selectedAddress = sessionStorage.getItem(WALLET_SESSION_KEYS.serviceProvider);
         if (!selectedAddress) {
           navigate('/', { replace: true });
           return;
@@ -116,22 +116,6 @@ const ServiceProviderDashboard: React.FC = () => {
 
   useEffect(() => {
     loadAccount();
-
-    const handleAccountsChanged = (accounts: string[]) => {
-      const selectedAddress = sessionStorage.getItem(ACTIVE_WALLET_KEY);
-      if (!selectedAddress || !accounts.some((wallet) => wallet.toLowerCase() === selectedAddress.toLowerCase())) {
-        sessionStorage.removeItem(ACTIVE_WALLET_KEY);
-        setAccount('');
-        setProfile(null);
-        setNftCount(0);
-        setLoading(false);
-        navigate('/', { replace: true });
-        return;
-      }
-    };
-
-    window.ethereum?.on('accountsChanged', handleAccountsChanged);
-    return () => window.ethereum?.removeListener('accountsChanged', handleAccountsChanged);
   }, [loadAccount, navigate]);
 
   const getLevelName = (level: number): string => {

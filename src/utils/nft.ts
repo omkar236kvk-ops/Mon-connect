@@ -1,7 +1,10 @@
 import { BrowserProvider, Contract } from 'ethers';
 import deployment from '../contracts/deployment.json';
 
-export const ACTIVE_WALLET_KEY = 'monconnect.activeWallet';
+export const WALLET_SESSION_KEYS = {
+  organizer: 'monconnect.organizer.wallet',
+  serviceProvider: 'monconnect.serviceProvider.wallet',
+};
 
 // Role-identity NFT addresses (VerifiedNft x2) - generated into src/contracts/deployment.json by the deploy script.
 export const ORGANIZER_NFT_ADDRESS: string = deployment.organizerNft.address;

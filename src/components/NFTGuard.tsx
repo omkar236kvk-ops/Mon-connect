@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { ACTIVE_WALLET_KEY, getProvider, hasNFT, ORGANIZER_NFT_ADDRESS, SERVICE_PROVIDER_NFT_ADDRESS } from '../utils/nft';
+import { getProvider, hasNFT, ORGANIZER_NFT_ADDRESS, SERVICE_PROVIDER_NFT_ADDRESS, WALLET_SESSION_KEYS } from '../utils/nft';
 
 const NFTGuard: React.FC<{ children: React.ReactNode; requiredRole?: 'organizer' | 'service-provider' | 'any' }> = ({ 
   children, 
@@ -19,7 +19,12 @@ const NFTGuard: React.FC<{ children: React.ReactNode; requiredRole?: 'organizer'
         return;
       }
       try {
-        const selectedAddress = sessionStorage.getItem(ACTIVE_WALLET_KEY);
+        const sessionKey = requiredRole === 'organizer'
+          ? WALLET_SESSION_KEYS.organizer
+          : requiredRole === 'service-provider'
+            ? WALLET_SESSION_KEYS.serviceProvider
+            : WALLET_SESSION_KEYS.organizer;
+        const selectedAddress = sessionStorage.getItem(sessionKey);
         if (!selectedAddress) {
           setAuthorized(false);
           navigate('/', { replace: true });
@@ -61,17 +66,6 @@ const NFTGuard: React.FC<{ children: React.ReactNode; requiredRole?: 'organizer'
     };
 
     check();
-    const handleAccountsChanged = (accounts: string[]) => {
-      const selectedAddress = sessionStorage.getItem(ACTIVE_WALLET_KEY);
-      if (!selectedAddress || !accounts.some((account) => account.toLowerCase() === selectedAddress.toLowerCase())) {
-        sessionStorage.removeItem(ACTIVE_WALLET_KEY);
-        setAuthorized(false);
-        navigate('/', { replace: true });
-      }
-    };
-
-    window.ethereum?.on('accountsChanged', handleAccountsChanged);
-    return () => window.ethereum?.removeListener('accountsChanged', handleAccountsChanged);
   }, [navigate, location.pathname, requiredRole]);
 
   if (authorized === null) return <div style={{ 
