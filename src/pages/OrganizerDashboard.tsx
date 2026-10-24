@@ -2,12 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { ethers } from 'ethers';
 import { useNavigate } from 'react-router-dom';
 import VantaBackground from '../components/VantaBackground';
-import { getProvider, ORGANIZER_NFT_ADDRESS, WALLET_SESSION_KEYS } from '../utils/nft';
+import { getProvider, WALLET_SESSION_KEYS } from '../utils/nft';
 import { ESCROW_ABI, ESCROW_CONTRACT_ADDRESS, ORGANIZER_FEE_RATE } from '../utils/escrow';
 import { CHAIN_CONNECT_V2_ADDRESS, CHAIN_CONNECT_V2_ABI } from '../utils/chainConnectV2';
 import EscrowAndPayments from './EscrowAndPayments';
 import WalletButton from '../components/WalletButton';
-import { FaCheckCircle } from 'react-icons/fa';
 
 
 interface ActivityItem {
@@ -25,12 +24,12 @@ interface HireFormData {
   tokenType: 'ETH' | 'Token';
 }
 
-type ViewType = 'verification' | 'dashboard' | 'browse-vendors' | 'escrow-payments' | 'my-events' | 'view-vendor-profile';
+type ViewType = 'dashboard' | 'browse-vendors' | 'escrow-payments' | 'my-events' | 'view-vendor-profile';
 
 const OrganizerDashboard: React.FC = () => {
   const navigate = useNavigate();
   const [account, setAccount] = useState<string>('');
-  const [currentView, setCurrentView] = useState<ViewType>('verification');
+  const [currentView, setCurrentView] = useState<ViewType>('dashboard');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [selectedService, setSelectedService] = useState<string>('All services');
   const [selectedLevel, setSelectedLevel] = useState<string>('Levels');
@@ -242,10 +241,6 @@ const OrganizerDashboard: React.FC = () => {
   const formatAddress = (address: string) => {
     if (!address) return '';
     return `${address.substring(0, 6)}...${address.substring(address.length - 4)}`;
-  };
-
-  const handleStartCreating = () => {
-    setCurrentView('dashboard');
   };
 
   const handleBrowseVendors = () => {
@@ -1857,308 +1852,218 @@ const OrganizerDashboard: React.FC = () => {
     );
   }
 
-  if (currentView === 'dashboard') {
-    return (
-      <div className="app" style={{ minHeight: '100vh', position: 'relative' }}>
-        <VantaBackground />
-        <div className="logo">MonConnect</div>
-        
-        <div style={{ position: 'relative', zIndex: 2, paddingTop: '80px', paddingBottom: '40px' }}>
-          {/* Header */}
-          <div style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            maxWidth: '1400px',
-            margin: '0 auto',
-            padding: '0 40px',
-            marginBottom: '40px'
-          }}>
-            <h1 style={{ color: '#fff', fontSize: '1.8rem', margin: 0 }}>Organizer Dashboard</h1>
-            {account && <WalletButton account={account} />}
+  return (
+    <div className="app" style={{ minHeight: '100vh', position: 'relative' }}>
+      <VantaBackground />
+      <div className="logo">MonConnect</div>
+      
+      <div style={{ position: 'relative', zIndex: 2, paddingTop: '80px', paddingBottom: '40px' }}>
+        {/* Header */}
+        <div style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          maxWidth: '1400px',
+          margin: '0 auto',
+          padding: '0 40px',
+          marginBottom: '40px'
+        }}>
+          <h1 style={{ color: '#fff', fontSize: '1.8rem', margin: 0 }}>Organizer Dashboard</h1>
+          {account && <WalletButton account={account} />}
+        </div>
+
+        {/* Main Content */}
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: '250px 1fr',
+          gap: '30px',
+          maxWidth: '1400px',
+          margin: '0 auto',
+          padding: '0 40px'
+        }}>
+          {/* Sidebar */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+            <div style={{
+              background: 'rgba(255, 255, 255, 0.08)',
+              border: '1px solid rgba(255, 255, 255, 0.2)',
+              borderRadius: '12px',
+              padding: '20px',
+              backdropFilter: 'blur(10px)'
+            }}>
+              <nav style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+                <div style={{
+                  padding: '12px 16px',
+                  borderRadius: '8px',
+                  color: '#fff',
+                  cursor: 'pointer',
+                  fontSize: '0.95rem',
+                  fontWeight: '500',
+                  background: 'rgba(108, 99, 255, 0.3)',
+                  border: '1px solid rgba(108, 99, 255, 0.5)',
+                  transition: 'all 0.3s ease'
+                }}>
+                  Dashboard
+                </div>
+                <div style={{
+                  padding: '12px 16px',
+                  borderRadius: '8px',
+                  color: 'rgba(255, 255, 255, 0.7)',
+                  cursor: 'pointer',
+                  fontSize: '0.95rem',
+                  fontWeight: '400',
+                  transition: 'all 0.3s ease'
+                }}
+                onClick={handleBrowseVendors}
+                onMouseOver={(e) => {
+                  e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)';
+                  e.currentTarget.style.color = '#fff';
+                }}
+                onMouseOut={(e) => {
+                  e.currentTarget.style.background = 'transparent';
+                  e.currentTarget.style.color = 'rgba(255, 255, 255, 0.7)';
+                }}>
+                  Browse Vendors
+                </div>
+                <div style={{
+                  padding: '12px 16px',
+                  borderRadius: '8px',
+                  color: 'rgba(255, 255, 255, 0.7)',
+                  cursor: 'pointer',
+                  fontSize: '0.95rem',
+                  fontWeight: '400',
+                  transition: 'all 0.3s ease'
+                }}
+                onClick={() => setCurrentView('my-events')}
+                onMouseOver={(e) => {
+                  e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)';
+                  e.currentTarget.style.color = '#fff';
+                }}
+                onMouseOut={(e) => {
+                  e.currentTarget.style.background = 'transparent';
+                  e.currentTarget.style.color = 'rgba(255, 255, 255, 0.7)';
+                }}>
+                  My Events
+                </div>
+                <div style={{
+                  padding: '12px 16px',
+                  borderRadius: '8px',
+                  color: 'rgba(255, 255, 255, 0.7)',
+                  cursor: 'pointer',
+                  fontSize: '0.95rem',
+                  fontWeight: '400',
+                  transition: 'all 0.3s ease'
+                }}
+                onClick={handleOpenEscrowPayments}
+                onMouseOver={(e) => {
+                  e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)';
+                  e.currentTarget.style.color = '#fff';
+                }}
+                onMouseOut={(e) => {
+                  e.currentTarget.style.background = 'transparent';
+                  e.currentTarget.style.color = 'rgba(255, 255, 255, 0.7)';
+                }}>
+                  Escrow and Payments
+                </div>
+              </nav>
+            </div>
           </div>
 
-          {/* Main Content */}
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: '250px 1fr',
-            gap: '30px',
-            maxWidth: '1400px',
-            margin: '0 auto',
-            padding: '0 40px'
-          }}>
-            {/* Sidebar */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-              <div style={{
-                background: 'rgba(255, 255, 255, 0.08)',
-                border: '1px solid rgba(255, 255, 255, 0.2)',
-                borderRadius: '12px',
-                padding: '20px',
-                backdropFilter: 'blur(10px)'
-              }}>
-                <nav style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-                  <div style={{
-                    padding: '12px 16px',
-                    borderRadius: '8px',
-                    color: '#fff',
-                    cursor: 'pointer',
-                    fontSize: '0.95rem',
-                    fontWeight: '500',
-                    background: 'rgba(108, 99, 255, 0.3)',
-                    border: '1px solid rgba(108, 99, 255, 0.5)',
-                    transition: 'all 0.3s ease'
-                  }}>
-                    Dashboard
+          {/* Main Panel */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '30px' }}>
+            {/* Stats Cards */}
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+              gap: '20px'
+            }}>
+              {[
+                { label: 'Active jobs', value: dashboardStats.activeJobs.toString(), color: '#FFA500' },
+                { label: 'Completed jobs', value: dashboardStats.completedJobs.toString(), color: '#4CAF50' },
+                { label: 'Total Spent', value: `${parseFloat(dashboardStats.totalSpent).toFixed(4)} MON`, color: '#6C63FF' },
+                { label: 'Escrow locked', value: `${parseFloat(dashboardStats.escrowLocked).toFixed(4)} MON`, color: '#FF6B6B' }
+              ].map((stat, idx) => (
+                <div key={idx} style={{
+                  background: 'rgba(255, 255, 255, 0.08)',
+                  border: '1px solid rgba(255, 255, 255, 0.2)',
+                  borderRadius: '12px',
+                  padding: '20px',
+                  textAlign: 'center',
+                  backdropFilter: 'blur(10px)',
+                  transition: 'all 0.3s ease',
+                  cursor: 'pointer'
+                }}
+                onMouseOver={(e) => {
+                  e.currentTarget.style.background = 'rgba(255, 255, 255, 0.12)';
+                  e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.3)';
+                }}
+                onMouseOut={(e) => {
+                  e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)';
+                  e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.2)';
+                }}>
+                  <div style={{ fontSize: '0.9rem', color: 'rgba(255, 255, 255, 0.7)', marginBottom: '8px' }}>
+                    {stat.label}
                   </div>
-                  <div style={{
-                    padding: '12px 16px',
-                    borderRadius: '8px',
-                    color: 'rgba(255, 255, 255, 0.7)',
-                    cursor: 'pointer',
-                    fontSize: '0.95rem',
-                    fontWeight: '400',
-                    transition: 'all 0.3s ease'
-                  }}
-                  onClick={handleBrowseVendors}
-                  onMouseOver={(e) => {
-                    e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)';
-                    e.currentTarget.style.color = '#fff';
-                  }}
-                  onMouseOut={(e) => {
-                    e.currentTarget.style.background = 'transparent';
-                    e.currentTarget.style.color = 'rgba(255, 255, 255, 0.7)';
-                  }}>
-                    Browse Vendors
+                  <div style={{ fontSize: '1.8rem', fontWeight: '600', color: stat.color }}>
+                    {stat.value}
                   </div>
-                  <div style={{
-                    padding: '12px 16px',
-                    borderRadius: '8px',
-                    color: 'rgba(255, 255, 255, 0.7)',
-                    cursor: 'pointer',
-                    fontSize: '0.95rem',
-                    fontWeight: '400',
-                    transition: 'all 0.3s ease'
-                  }}
-                  onClick={() => setCurrentView('my-events')}
-                  onMouseOver={(e) => {
-                    e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)';
-                    e.currentTarget.style.color = '#fff';
-                  }}
-                  onMouseOut={(e) => {
-                    e.currentTarget.style.background = 'transparent';
-                    e.currentTarget.style.color = 'rgba(255, 255, 255, 0.7)';
-                  }}>
-                    My Events
-                  </div>
-                  <div style={{
-                    padding: '12px 16px',
-                    borderRadius: '8px',
-                    color: 'rgba(255, 255, 255, 0.7)',
-                    cursor: 'pointer',
-                    fontSize: '0.95rem',
-                    fontWeight: '400',
-                    transition: 'all 0.3s ease'
-                  }}
-                  onClick={handleOpenEscrowPayments}
-                  onMouseOver={(e) => {
-                    e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)';
-                    e.currentTarget.style.color = '#fff';
-                  }}
-                  onMouseOut={(e) => {
-                    e.currentTarget.style.background = 'transparent';
-                    e.currentTarget.style.color = 'rgba(255, 255, 255, 0.7)';
-                  }}>
-                    Escrow and Payments
-                  </div>
-                </nav>
-              </div>
+                </div>
+              ))}
             </div>
 
-            {/* Main Panel */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '30px' }}>
-              {/* Stats Cards */}
-              <div style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
-                gap: '20px'
-              }}>
-                {[
-                  { label: 'Active jobs', value: dashboardStats.activeJobs.toString(), color: '#FFA500' },
-                  { label: 'Completed jobs', value: dashboardStats.completedJobs.toString(), color: '#4CAF50' },
-                  { label: 'Total Spent', value: `${parseFloat(dashboardStats.totalSpent).toFixed(4)} MON`, color: '#6C63FF' },
-                  { label: 'Escrow locked', value: `${parseFloat(dashboardStats.escrowLocked).toFixed(4)} MON`, color: '#FF6B6B' }
-                ].map((stat, idx) => (
-                  <div key={idx} style={{
-                    background: 'rgba(255, 255, 255, 0.08)',
-                    border: '1px solid rgba(255, 255, 255, 0.2)',
-                    borderRadius: '12px',
-                    padding: '20px',
-                    textAlign: 'center',
-                    backdropFilter: 'blur(10px)',
-                    transition: 'all 0.3s ease',
-                    cursor: 'pointer'
+            {/* Recent Activity */}
+            <div style={{
+              background: 'rgba(255, 255, 255, 0.08)',
+              border: '1px solid rgba(255, 255, 255, 0.2)',
+              borderRadius: '12px',
+              padding: '25px',
+              backdropFilter: 'blur(10px)'
+            }}>
+              <h2 style={{ color: '#fff', fontSize: '1.3rem', marginBottom: '20px', margin: '0 0 20px 0' }}>
+                Recent activity
+              </h2>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                {recentActivities.map((activity) => (
+                  <div key={activity.id} style={{
+                    background: 'rgba(255, 255, 255, 0.05)',
+                    border: '1px solid rgba(255, 255, 255, 0.1)',
+                    borderRadius: '8px',
+                    padding: '15px 20px',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    transition: 'all 0.3s ease'
                   }}
                   onMouseOver={(e) => {
-                    e.currentTarget.style.background = 'rgba(255, 255, 255, 0.12)';
-                    e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.3)';
+                    e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)';
+                    e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.15)';
                   }}
                   onMouseOut={(e) => {
-                    e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)';
-                    e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.2)';
+                    e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)';
+                    e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.1)';
                   }}>
-                    <div style={{ fontSize: '0.9rem', color: 'rgba(255, 255, 255, 0.7)', marginBottom: '8px' }}>
-                      {stat.label}
-                    </div>
-                    <div style={{ fontSize: '1.8rem', fontWeight: '600', color: stat.color }}>
-                      {stat.value}
+                    <span style={{ color: '#fff', fontSize: '0.95rem' }}>{activity.title}</span>
+                    <div style={{ display: 'flex', gap: '15px', alignItems: 'center' }}>
+                      <span style={{
+                        padding: '4px 12px',
+                        borderRadius: '12px',
+                        fontSize: '0.85rem',
+                        background: activity.status === 'completed' 
+                          ? 'rgba(76, 175, 80, 0.3)'
+                          : 'rgba(255, 152, 0, 0.3)',
+                        color: activity.status === 'completed' ? '#4CAF50' : '#FFA500',
+                        textTransform: 'capitalize'
+                      }}>
+                        {activity.status}
+                      </span>
+                      <span style={{ color: '#fff', fontWeight: '600', minWidth: '60px', textAlign: 'right' }}>
+                        {activity.amount}
+                      </span>
                     </div>
                   </div>
                 ))}
               </div>
-
-              {/* Recent Activity */}
-              <div style={{
-                background: 'rgba(255, 255, 255, 0.08)',
-                border: '1px solid rgba(255, 255, 255, 0.2)',
-                borderRadius: '12px',
-                padding: '25px',
-                backdropFilter: 'blur(10px)'
-              }}>
-                <h2 style={{ color: '#fff', fontSize: '1.3rem', marginBottom: '20px', margin: '0 0 20px 0' }}>
-                  Recent activity
-                </h2>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                  {recentActivities.map((activity) => (
-                    <div key={activity.id} style={{
-                      background: 'rgba(255, 255, 255, 0.05)',
-                      border: '1px solid rgba(255, 255, 255, 0.1)',
-                      borderRadius: '8px',
-                      padding: '15px 20px',
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
-                      transition: 'all 0.3s ease'
-                    }}
-                    onMouseOver={(e) => {
-                      e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)';
-                      e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.15)';
-                    }}
-                    onMouseOut={(e) => {
-                      e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)';
-                      e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.1)';
-                    }}>
-                      <span style={{ color: '#fff', fontSize: '0.95rem' }}>{activity.title}</span>
-                      <div style={{ display: 'flex', gap: '15px', alignItems: 'center' }}>
-                        <span style={{
-                          padding: '4px 12px',
-                          borderRadius: '12px',
-                          fontSize: '0.85rem',
-                          background: activity.status === 'completed' 
-                            ? 'rgba(76, 175, 80, 0.3)'
-                            : 'rgba(255, 152, 0, 0.3)',
-                          color: activity.status === 'completed' ? '#4CAF50' : '#FFA500',
-                          textTransform: 'capitalize'
-                        }}>
-                          {activity.status}
-                        </span>
-                        <span style={{ color: '#fff', fontWeight: '600', minWidth: '60px', textAlign: 'right' }}>
-                          {activity.amount}
-                        </span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
             </div>
           </div>
-        </div>
-      </div>
-    );
-  }
-
-  // Verification screen (initial state)
-  return (
-    <div className="app" style={{
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      minHeight: '100vh'
-    }}>
-      <VantaBackground />
-      <div className="logo">MonConnect</div>
-      
-      <div className="auth-container page-enter" style={{ 
-        maxWidth: '900px', 
-        padding: '3rem',
-        textAlign: 'center',
-        margin: '0 auto'
-      }}>
-        <h1 style={{ 
-          fontSize: '2.5rem', 
-          marginBottom: '1rem', 
-          color: '#fff',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          gap: '12px'
-        }}>
-          <FaCheckCircle style={{ color: '#4CAF50' }} />
-          Congratulations, Organizer!
-        </h1>
-        
-        <div style={{ 
-          background: 'rgba(255, 255, 255, 0.1)', 
-          padding: '2rem', 
-          borderRadius: '12px',
-          marginTop: '2rem',
-          backdropFilter: 'blur(10px)'
-        }}>
-          <h2 style={{ color: '#4CAF50', marginBottom: '1.5rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
-            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <circle cx="12" cy="12" r="10" fill="#4CAF50"/>
-              <path d="M8 12L11 15L16 9" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-            </svg>
-            You're Verified as an Event Organizer!
-          </h2>
-
-          <p style={{ fontSize: '1.1rem', lineHeight: '1.8', color: '#e0e0e0', marginBottom: '2rem' }}>
-            You successfully minted your Organizer Verified Access NFT! You can now access all organizer features and start creating amazing events.
-          </p>
-          
-          <div style={{ marginTop: '2rem', padding: '1.5rem', background: 'rgba(76, 175, 80, 0.2)', borderRadius: '8px' }}>
-            <h3 style={{ color: '#fff', marginBottom: '1rem' }}>Your NFT Details</h3>
-            <div style={{ color: '#e0e0e0', textAlign: 'left', maxWidth: '500px', margin: '0 auto' }}>
-              <p style={{ marginBottom: '0.5rem', wordBreak: 'break-all' }}>
-                <strong>Contract:</strong> {ORGANIZER_NFT_ADDRESS}
-              </p>
-              <p style={{ marginBottom: '0.5rem' }}>
-                <strong>Network:</strong> Monad Testnet (Chain ID: 10143)
-              </p>
-              <p style={{ marginBottom: '0.5rem' }}>
-                <strong>Your Wallet:</strong> {formatAddress(account)}
-              </p>
-              <p style={{ marginBottom: '0' }}>
-                <strong>Status:</strong> <span style={{ color: '#4CAF50' }}>Active & Verified</span>
-              </p>
-            </div>
-          </div>
-
-          
-        </div>
-
-        <div style={{ marginTop: '2rem', display: 'flex', gap: '1rem', justifyContent: 'center', flexWrap: 'wrap' }}>
-          <button 
-            className="btn btn-secondary"
-            onClick={() => window.location.href = '/'}
-          >
-            ← Back to Home
-          </button>
-          <button 
-            className="btn btn-primary"
-            onClick={handleStartCreating}
-          >
-            Start Creating Events
-          </button>
         </div>
       </div>
     </div>

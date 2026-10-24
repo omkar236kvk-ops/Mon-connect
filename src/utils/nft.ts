@@ -47,6 +47,42 @@ export async function requestWalletAccounts(): Promise<string[]> {
   return accounts;
 }
 
+const MONAD_TESTNET = {
+  chainId: '0x279F', // 10143
+  chainName: 'Monad Testnet',
+  nativeCurrency: { name: 'MON', symbol: 'MON', decimals: 18 },
+  rpcUrls: ['https://testnet-rpc.monad.xyz'],
+  blockExplorerUrls: ['https://testnet.monadexplorer.com'],
+};
+
+async function switchToMonad() {
+  const ethereum = (window as any).ethereum;
+  try {
+    await ethereum.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: MONAD_TESTNET.chainId }] });
+  } catch (err: any) {
+    if (err?.code !== 4902) throw err;
+    await ethereum.request({ method: 'wallet_addEthereumChain', params: [MONAD_TESTNET] });
+  }
+}
+
+// One-shot connect: asks MetaMask for accounts, switches to Monad, then picks the account for this role.
+// Prefers an account already holding the role NFT; skips accounts that hold the other role's NFT.
+export async function connectForRole(roleNft: string, otherRoleNft: string) {
+  const accounts = await requestWalletAccounts();
+  if (!accounts.length) throw new Error('No wallet accounts are available. Unlock MetaMask and try again.');
+  await switchToMonad();
+  const provider = getProvider();
+
+  let fresh: string | null = null;
+  for (const account of accounts) {
+    if (await hasNFT(provider, account, otherRoleNft)) continue;
+    if (await hasNFT(provider, account, roleNft)) return { provider, account, registered: true };
+    if (!fresh) fresh = account;
+  }
+  if (!fresh) throw new Error('The selected account is registered for the other role. Pick a different MetaMask account.');
+  return { provider, account: fresh, registered: false };
+}
+
 export async function hasNFT(providerOrSigner: any, owner: string, contractAddress: string): Promise<boolean> {
   try {
     if (!providerOrSigner) {
