@@ -2,11 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { ethers } from 'ethers';
 import { useNavigate } from 'react-router-dom';
 import VantaBackground from '../components/VantaBackground';
-import { getProvider, WALLET_SESSION_KEYS } from '../utils/nft';
+import { getProvider, WALLET_SESSION_KEYS, getSignerFor } from '../utils/nft';
 import { ESCROW_ABI, ESCROW_CONTRACT_ADDRESS, ORGANIZER_FEE_RATE } from '../utils/escrow';
-import { CHAIN_CONNECT_V2_ADDRESS, CHAIN_CONNECT_V2_ABI } from '../utils/chainConnectV2';
+import { CHAIN_CONNECT_V2_ADDRESS, CHAIN_CONNECT_V2_ABI, getLevelName as levelName } from '../utils/chainConnectV2';
 import EscrowAndPayments from './EscrowAndPayments';
 import WalletButton from '../components/WalletButton';
+import EventList, { actionButton } from '../components/EventList';
+import { EventItem, fetchEvents, getEventRegistry } from '../utils/events';
 
 
 interface ActivityItem {
@@ -47,7 +49,16 @@ const OrganizerDashboard: React.FC = () => {
     tokenType: 'ETH'
   });
   const [escrowRefreshTrigger, setEscrowRefreshTrigger] = useState(0);
-  
+
+  // Events (stored on chain in EventRegistry)
+  const [showEventDialog, setShowEventDialog] = useState(false);
+  const [eventForm, setEventForm] = useState({ name: '', organizerName: '', serviceNeeded: 'Merchandise', attendees: '', date: '' });
+  const [creatingEvent, setCreatingEvent] = useState(false);
+  const [myEvents, setMyEvents] = useState<EventItem[]>([]);
+  const [eventsLoading, setEventsLoading] = useState(false);
+  const [eventsError, setEventsError] = useState<string | null>(null);
+  const [applicantsByEvent, setApplicantsByEvent] = useState<Record<number, any[]>>({});
+
   // Real-time stats from blockchain
   const [dashboardStats, setDashboardStats] = useState({
     activeJobs: 0,
@@ -285,21 +296,108 @@ const OrganizerDashboard: React.FC = () => {
     }
   };
 
-  const handleHireAndFund = (vendor: any) => {
+  const handleHireAndFund = (vendor: any, deadline: string = '') => {
     setSelectedVendor(vendor);
     setHireFormData({
       vendorAddress: vendor.walletAddress || '', // Auto-populate from vendor's wallet address
       jobAmount: '',
-      deadline: '',
+      deadline,
       penaltyRate: '5',
       tokenType: 'ETH'
     });
     setShowHireDialog(true);
+    setCurrentView('browse-vendors'); // the hire dialog is rendered in this view
+  };
+
+  // Hire an event applicant: opens the escrow dialog with the event date as the job deadline.
+  const renderApplicants = (e: EventItem) => {
+    const applicants = applicantsByEvent[e.id] || [];
+    if (!applicants.length) return <p style={{ color: 'rgba(255, 255, 255, 0.5)', margin: 0 }}>No applicants yet</p>;
+    const deadline = new Date(e.eventDate * 1000 - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+        <p style={{ color: '#fff', fontWeight: 600, margin: 0 }}>Applicants ({applicants.length})</p>
+        {applicants.map((v) => (
+          <div key={v.walletAddress} style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <span style={{ color: 'rgba(255, 255, 255, 0.8)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {v.name} {v.category && `• ${v.category}`}
+            </span>
+            <button style={{ ...actionButton, width: 'auto', padding: '6px 14px' }} onClick={() => handleHireAndFund(v, deadline)}>
+              Hire
+            </button>
+          </div>
+        ))}
+      </div>
+    );
   };
 
   const handleCloseHireDialog = () => {
     setShowHireDialog(false);
     setSelectedVendor(null);
+  };
+
+  const loadMyEvents = async () => {
+    if (!account) return;
+    setEventsLoading(true);
+    setEventsError(null);
+    try {
+      const provider = getProvider();
+      const mine = (await fetchEvents(provider)).filter((e) => e.organizer.toLowerCase() === account.toLowerCase());
+      const registry = getEventRegistry(provider);
+      const chainConnect = new ethers.Contract(CHAIN_CONNECT_V2_ADDRESS, CHAIN_CONNECT_V2_ABI, provider);
+      const byEvent: Record<number, any[]> = {};
+      await Promise.all(mine.map(async (e) => {
+        const addresses: string[] = await registry.getApplicants(e.id);
+        byEvent[e.id] = await Promise.all(addresses.map(async (addr) => {
+          const v = await chainConnect.getVendorProfile(addr);
+          return { walletAddress: addr, name: v.businessName || addr, category: v.businessType, level: levelName(Number(v.level)) };
+        }));
+      }));
+      setMyEvents(mine);
+      setApplicantsByEvent(byEvent);
+    } catch (err: any) {
+      console.error('Failed to load events:', err);
+      setEventsError(err?.message || 'Failed to load events.');
+    } finally {
+      setEventsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (currentView === 'my-events') loadMyEvents();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentView, account]);
+
+  const handleCreateEvent = async () => {
+    const attendees = parseInt(eventForm.attendees, 10);
+    const eventDate = Math.floor(new Date(eventForm.date).getTime() / 1000);
+    if (!eventForm.name.trim() || !eventForm.organizerName.trim() || !eventForm.serviceNeeded) {
+      alert('Please fill in Event Name, Organizer Name and Services Needed.');
+      return;
+    }
+    if (!(attendees > 0)) {
+      alert('Expected Attendees must be a number greater than 0.');
+      return;
+    }
+    if (!eventDate || eventDate <= Date.now() / 1000) {
+      alert('Event Date & Time must be in the future.');
+      return;
+    }
+
+    try {
+      setCreatingEvent(true);
+      const signer = await getSignerFor(account);
+      const tx = await getEventRegistry(signer).createEvent(eventForm.name.trim(), eventForm.organizerName.trim(), eventForm.serviceNeeded, attendees, eventDate);
+      await tx.wait();
+      setShowEventDialog(false);
+      setEventForm({ name: '', organizerName: '', serviceNeeded: 'Merchandise', attendees: '', date: '' });
+      await loadMyEvents();
+    } catch (err: any) {
+      console.error('Error creating event:', err);
+      alert(err.code === 'ACTION_REJECTED' ? 'Transaction was rejected' : 'Failed to create event: ' + (err.reason || err.message || 'Unknown error'));
+    } finally {
+      setCreatingEvent(false);
+    }
   };
 
   const handleSubmitHireForm = async () => {
@@ -344,12 +442,7 @@ const OrganizerDashboard: React.FC = () => {
       const provider = await getProvider();
       if (!provider) throw new Error('MetaMask provider is unavailable. Reconnect your organizer wallet.');
 
-      const authorizedAccounts: string[] = await window.ethereum?.request({ method: 'eth_accounts' }) || [];
-      if (!authorizedAccounts.some((wallet) => wallet.toLowerCase() === account.toLowerCase())) {
-        throw new Error(`MetaMask is not exposing the selected organizer wallet ${account}. Select that account in MetaMask and retry.`);
-      }
-
-      const signer = await provider.getSigner(account);
+      const signer = await getSignerFor(account);
       const organizerAddress = await signer.getAddress();
       if (organizerAddress.toLowerCase() !== account.toLowerCase()) {
         throw new Error(`Connected signer ${organizerAddress} does not match the selected organizer wallet ${account}.`);
@@ -472,7 +565,7 @@ const OrganizerDashboard: React.FC = () => {
         alert('Invalid vendor address format. Please enter a valid Ethereum address (0x...)');
       } else if (error.message && error.message.includes('Organizer cannot be vendor')) {
         alert('Error: Vendor cannot be the same as organizer. Please use a different wallet address for the vendor.');
-      } else if (error.message && (error.message.includes('not exposing the selected organizer wallet') || error.message.includes('does not match the selected organizer wallet') || error.message.includes('not registered as a service provider') || error.message.includes('Service-provider wallet'))) {
+      } else if (error.message && (error.message.includes("isn't connected to MonConnect") || error.message.includes('does not match the selected organizer wallet') || error.message.includes('not registered as a service provider') || error.message.includes('Service-provider wallet'))) {
         alert(error.message);
       } else {
         alert('Failed to create escrow. Error: ' + (error.message || error.toString()));
@@ -926,7 +1019,7 @@ const OrganizerDashboard: React.FC = () => {
           {/* Add Event Button */}
           <div style={{ marginBottom: '30px' }}>
             <button
-              onClick={() => setShowHireDialog(true)}
+              onClick={() => setShowEventDialog(true)}
               style={{
                 background: 'linear-gradient(135deg, #6C63FF 0%, #5A52D5 100%)',
                 border: 'none',
@@ -946,23 +1039,11 @@ const OrganizerDashboard: React.FC = () => {
             </button>
           </div>
 
-          {/* Events List Placeholder */}
-          <div style={{
-            background: 'rgba(255, 255, 255, 0.08)',
-            border: '1px solid rgba(255, 255, 255, 0.2)',
-            borderRadius: '12px',
-            padding: '40px',
-            textAlign: 'center',
-            backdropFilter: 'blur(10px)'
-          }}>
-            <p style={{ color: 'rgba(255, 255, 255, 0.6)', fontSize: '1.1rem' }}>
-              No events created yet. Click "Add New Event" to create your first event!
-            </p>
-          </div>
+          <EventList events={myEvents} loading={eventsLoading} error={eventsError} emptyText='No events created yet. Click "Add New Event" to create your first event!' renderAction={renderApplicants} />
         </div>
 
         {/* Event Creation Dialog */}
-        {showHireDialog && (
+        {showEventDialog && (
           <div style={{
             position: 'fixed',
             top: 0,
@@ -997,8 +1078,8 @@ const OrganizerDashboard: React.FC = () => {
                   </label>
                   <input
                     type="text"
-                    value={hireFormData.vendorAddress}
-                    onChange={(e) => setHireFormData({...hireFormData, vendorAddress: e.target.value})}
+                    value={eventForm.name}
+                    onChange={(e) => setEventForm({...eventForm, name: e.target.value})}
                     placeholder="e.g., Tech Conference 2025"
                     style={{
                       width: '100%',
@@ -1020,8 +1101,8 @@ const OrganizerDashboard: React.FC = () => {
                   </label>
                   <input
                     type="text"
-                    value={hireFormData.jobAmount}
-                    onChange={(e) => setHireFormData({...hireFormData, jobAmount: e.target.value})}
+                    value={eventForm.organizerName}
+                    onChange={(e) => setEventForm({...eventForm, organizerName: e.target.value})}
                     placeholder="Your name or organization"
                     style={{
                       width: '100%',
@@ -1042,8 +1123,8 @@ const OrganizerDashboard: React.FC = () => {
                     Services Needed *
                   </label>
                   <select
-                    value={hireFormData.tokenType}
-                    onChange={(e) => setHireFormData({...hireFormData, tokenType: e.target.value as 'ETH' | 'Token'})}
+                    value={eventForm.serviceNeeded}
+                    onChange={(e) => setEventForm({...eventForm, serviceNeeded: e.target.value})}
                     style={{
                       width: '100%',
                       padding: '12px',
@@ -1056,14 +1137,14 @@ const OrganizerDashboard: React.FC = () => {
                       cursor: 'pointer'
                     }}
                   >
-                    <option value="ETH" style={{ background: '#1a1a2e', color: '#fff' }}>Merchandise</option>
-                    <option value="Token" style={{ background: '#1a1a2e', color: '#fff' }}>Catering</option>
-                    <option value="Token" style={{ background: '#1a1a2e', color: '#fff' }}>Photography</option>
-                    <option value="Token" style={{ background: '#1a1a2e', color: '#fff' }}>Videography</option>
-                    <option value="Token" style={{ background: '#1a1a2e', color: '#fff' }}>Sound & Lighting</option>
-                    <option value="Token" style={{ background: '#1a1a2e', color: '#fff' }}>Venue Decoration</option>
-                    <option value="Token" style={{ background: '#1a1a2e', color: '#fff' }}>Security</option>
-                    <option value="Token" style={{ background: '#1a1a2e', color: '#fff' }}>Transportation</option>
+                    <option value="Merchandise" style={{ background: '#1a1a2e', color: '#fff' }}>Merchandise</option>
+                    <option value="Catering" style={{ background: '#1a1a2e', color: '#fff' }}>Catering</option>
+                    <option value="Photography" style={{ background: '#1a1a2e', color: '#fff' }}>Photography</option>
+                    <option value="Videography" style={{ background: '#1a1a2e', color: '#fff' }}>Videography</option>
+                    <option value="Sound & Lighting" style={{ background: '#1a1a2e', color: '#fff' }}>Sound & Lighting</option>
+                    <option value="Venue Decoration" style={{ background: '#1a1a2e', color: '#fff' }}>Venue Decoration</option>
+                    <option value="Security" style={{ background: '#1a1a2e', color: '#fff' }}>Security</option>
+                    <option value="Transportation" style={{ background: '#1a1a2e', color: '#fff' }}>Transportation</option>
                   </select>
                 </div>
 
@@ -1074,8 +1155,8 @@ const OrganizerDashboard: React.FC = () => {
                   </label>
                   <input
                     type="number"
-                    value={hireFormData.penaltyRate}
-                    onChange={(e) => setHireFormData({...hireFormData, penaltyRate: e.target.value})}
+                    value={eventForm.attendees}
+                    onChange={(e) => setEventForm({...eventForm, attendees: e.target.value})}
                     placeholder="e.g., 500"
                     style={{
                       width: '100%',
@@ -1097,8 +1178,8 @@ const OrganizerDashboard: React.FC = () => {
                   </label>
                   <input
                     type="datetime-local"
-                    value={hireFormData.deadline}
-                    onChange={(e) => setHireFormData({...hireFormData, deadline: e.target.value})}
+                    value={eventForm.date}
+                    onChange={(e) => setEventForm({...eventForm, date: e.target.value})}
                     style={{
                       width: '100%',
                       padding: '12px',
@@ -1116,10 +1197,8 @@ const OrganizerDashboard: React.FC = () => {
                 {/* Buttons */}
                 <div style={{ display: 'flex', gap: '12px', marginTop: '10px' }}>
                   <button
-                    onClick={() => {
-                      alert('Event created successfully! (This is a demo - connect to backend to save)');
-                      setShowHireDialog(false);
-                    }}
+                    onClick={handleCreateEvent}
+                    disabled={creatingEvent}
                     style={{
                       flex: 1,
                       padding: '14px',
@@ -1135,10 +1214,11 @@ const OrganizerDashboard: React.FC = () => {
                     onMouseOver={(e) => e.currentTarget.style.transform = 'translateY(-2px)'}
                     onMouseOut={(e) => e.currentTarget.style.transform = 'translateY(0)'}
                   >
-                    Create Event
+                    {creatingEvent ? 'Creating on chain...' : 'Create Event'}
                   </button>
                   <button
-                    onClick={handleCloseHireDialog}
+                    onClick={() => setShowEventDialog(false)}
+                    disabled={creatingEvent}
                     style={{
                       flex: 1,
                       padding: '14px',
@@ -1166,6 +1246,15 @@ const OrganizerDashboard: React.FC = () => {
   }
 
   if (currentView === 'browse-vendors') {
+    const query = searchQuery.trim().toLowerCase();
+    const filteredVendors = vendors.filter((v: any) =>
+      (selectedService === 'All services' || v.category === selectedService) &&
+      (selectedLevel === 'Levels' || String(v.level) === selectedLevel) &&
+      (!query || [v.name, v.ownerName, v.category, v.walletAddress].some((field) => field?.toLowerCase().includes(query)))
+    );
+    // Only offer services some registered vendor actually provides.
+    const serviceOptions: string[] = Array.from(new Set<string>(vendors.map((v: any) => v.category).filter(Boolean))).sort();
+
     return (
       <div className="app" style={{ minHeight: '100vh', position: 'relative' }}>
         <VantaBackground />
@@ -1361,14 +1450,9 @@ const OrganizerDashboard: React.FC = () => {
                     }}
                   >
                     <option value="All services" style={{ backgroundColor: '#000', color: '#fff' }}>All services</option>
-                    <option value="Catering" style={{ backgroundColor: '#000', color: '#fff' }}>Catering</option>
-                    <option value="3D Printing" style={{ backgroundColor: '#000', color: '#fff' }}>3D Printing</option>
-                    <option value="Co-working" style={{ backgroundColor: '#000', color: '#fff' }}>Co-working</option>
-                    <option value="Photography" style={{ backgroundColor: '#000', color: '#fff' }}>Photography</option>
-                    <option value="Printing and Signage" style={{ backgroundColor: '#000', color: '#fff' }}>Printing and Signage</option>
-                    <option value="Marketing" style={{ backgroundColor: '#000', color: '#fff' }}>Marketing</option>
-                    <option value="Merchandise" style={{ backgroundColor: '#000', color: '#fff' }}>Merchandise</option>
-                  
+                    {serviceOptions.map((service) => (
+                      <option key={service} value={service} style={{ backgroundColor: '#000', color: '#fff' }}>{service}</option>
+                    ))}
                   </select>
                 </div>
 
@@ -1406,9 +1490,9 @@ const OrganizerDashboard: React.FC = () => {
                     }}
                   >
                     <option value="Levels" style={{ backgroundColor: '#000', color: '#fff' }}>Levels</option>
-                    <option value="Gold" style={{ backgroundColor: '#000', color: '#fff' }}>Gold</option>
-                    <option value="Silver" style={{ backgroundColor: '#000', color: '#fff' }}>Silver</option>
-                    <option value="Bronze" style={{ backgroundColor: '#000', color: '#fff' }}>Bronze</option>
+                    <option value="3" style={{ backgroundColor: '#000', color: '#fff' }}>Expert (Gold)</option>
+                    <option value="2" style={{ backgroundColor: '#000', color: '#fff' }}>Pro (Silver)</option>
+                    <option value="1" style={{ backgroundColor: '#000', color: '#fff' }}>Beginner (Bronze)</option>
                   </select>
                 </div>
               </div>
@@ -1420,7 +1504,12 @@ const OrganizerDashboard: React.FC = () => {
               gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
               gap: '20px'
             }}>
-              {vendors.map((vendor: any) => (
+              {filteredVendors.length === 0 && (
+                <p style={{ color: 'rgba(255, 255, 255, 0.6)', fontSize: '1.1rem' }}>
+                  {vendors.length ? 'No vendors match your search or filters.' : 'No vendors registered yet.'}
+                </p>
+              )}
+              {filteredVendors.map((vendor: any) => (
                 <div key={vendor.id} style={{
                   background: 'rgba(255, 255, 255, 0.08)',
                   border: '1px solid rgba(255, 255, 255, 0.2)',
@@ -1461,7 +1550,7 @@ const OrganizerDashboard: React.FC = () => {
                       color: '#ffffffff',
                       fontSize: '0.85rem'
                     }}>
-                      {vendor.level}
+                      {vendor.levelName || vendor.level}
                     </span>
                   </div>
 

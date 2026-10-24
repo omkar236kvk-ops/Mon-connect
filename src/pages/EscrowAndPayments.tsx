@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { ethers } from 'ethers';
 import VantaBackground from '../components/VantaBackground';
-import { getProvider } from '../utils/nft';
+import { getProvider, getSignerFor } from '../utils/nft';
 import { ESCROW_ABI, ESCROW_CONTRACT_ADDRESS, getJobStatusFromNumber } from '../utils/escrow';
 import { FaCheckCircle, FaMoneyBillWave, FaClock, FaInfoCircle, FaTimes, FaSync, FaHourglassHalf, FaChartBar } from 'react-icons/fa';
 
@@ -204,7 +204,7 @@ const EscrowAndPayments: React.FC<EscrowAndPaymentsProps> = ({ account, onBack, 
       const provider = getProvider();
       if (!provider) throw new Error('Provider not available');
 
-      const signer = await provider.getSigner(account);
+      const signer = await getSignerFor(account);
       const signerAddress = await signer.getAddress();
       if (signerAddress.toLowerCase() !== account.toLowerCase()) {
         throw new Error('The selected wallet changed. Refresh the escrow list and try again with the organizer wallet.');
@@ -246,7 +246,7 @@ const EscrowAndPayments: React.FC<EscrowAndPaymentsProps> = ({ account, onBack, 
       const provider = getProvider();
       if (!provider) throw new Error('Provider not available');
 
-      const signer = await provider.getSigner(account);
+      const signer = await getSignerFor(account);
       const contract = new ethers.Contract(ESCROW_CONTRACT_ADDRESS, ESCROW_ABI, signer);
       
       // Get escrow details before release
@@ -303,7 +303,7 @@ const EscrowAndPayments: React.FC<EscrowAndPaymentsProps> = ({ account, onBack, 
       const provider = getProvider();
       if (!provider) throw new Error('Provider not available');
 
-      const signer = await provider.getSigner(account);
+      const signer = await getSignerFor(account);
       const contract = new ethers.Contract(ESCROW_CONTRACT_ADDRESS, ESCROW_ABI, signer);
       
       console.log('Refunding escrow:', jobId);

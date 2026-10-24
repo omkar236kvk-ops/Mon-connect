@@ -3,9 +3,11 @@ import { useNavigate } from 'react-router-dom';
 import { ethers } from 'ethers';
 import VantaBackground from '../components/VantaBackground';
 import WalletButton from '../components/WalletButton';
-import { getProvider, SERVICE_PROVIDER_NFT_ADDRESS, WALLET_SESSION_KEYS } from '../utils/nft';
+import { getProvider, SERVICE_PROVIDER_NFT_ADDRESS, WALLET_SESSION_KEYS, getSignerFor } from '../utils/nft';
 import { CHAIN_CONNECT_V2_ADDRESS, CHAIN_CONNECT_V2_ABI } from '../utils/chainConnectV2';
 import ServiceProviderEscrow from './ServiceProviderEscrow';
+import EventList, { actionButton } from '../components/EventList';
+import { EventItem, fetchEvents, getEventRegistry } from '../utils/events';
 import { FaHourglassHalf, FaSave, FaFileAlt, FaCheckCircle, FaTimesCircle, FaMoneyBillWave, FaChartBar } from 'react-icons/fa';
 
 type ViewType = 'verification' | 'dashboard' | 'my-jobs' | 'escrow-payments' | 'update-profile';
@@ -40,6 +42,63 @@ const ServiceProviderDashboard: React.FC = () => {
   const [nftCount, setNftCount] = useState(0);
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [events, setEvents] = useState<EventItem[]>([]);
+  const [eventsLoading, setEventsLoading] = useState(true);
+  const [eventsError, setEventsError] = useState<string | null>(null);
+  const [appliedIds, setAppliedIds] = useState<Set<number>>(new Set());
+  const [applyingId, setApplyingId] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (!account) return;
+    (async () => {
+      try {
+        const provider = getProvider();
+        const list = await fetchEvents(provider);
+        const registry = getEventRegistry(provider);
+        // ponytail: one hasApplied call per event; fine for a testnet-sized list.
+        const applied = await Promise.all(list.map((e) => registry.hasApplied(e.id, account)));
+        setEvents(list);
+        setAppliedIds(new Set(list.filter((_, i) => applied[i]).map((e) => e.id)));
+      } catch (err: any) {
+        setEventsError(err?.message || 'Failed to load events.');
+      } finally {
+        setEventsLoading(false);
+      }
+    })();
+  }, [account]);
+
+  const handleApply = async (eventId: number) => {
+    if (!profile) {
+      alert('Register your profile on the blockchain first, so the organizer can hire you.');
+      return;
+    }
+    try {
+      setApplyingId(eventId);
+      const signer = await getSignerFor(account);
+      const tx = await getEventRegistry(signer).applyToEvent(eventId);
+      await tx.wait();
+      setAppliedIds((prev) => new Set(prev).add(eventId));
+    } catch (err: any) {
+      console.error('Error applying to event:', err);
+      alert(err.code === 'ACTION_REJECTED' ? 'Transaction was rejected' : 'Failed to apply: ' + (err.reason || err.message || 'Unknown error'));
+    } finally {
+      setApplyingId(null);
+    }
+  };
+
+  const renderApply = (e: EventItem) => {
+    if (appliedIds.has(e.id)) {
+      return <p style={{ color: '#4CAF50', fontWeight: 600, margin: 0 }}>✓ Applied — the organizer will hire you via escrow</p>;
+    }
+    if (e.eventDate * 1000 <= Date.now()) {
+      return <p style={{ color: 'rgba(255, 255, 255, 0.5)', margin: 0 }}>Event has started</p>;
+    }
+    return (
+      <button style={actionButton} onClick={() => handleApply(e.id)} disabled={applyingId !== null}>
+        {applyingId === e.id ? 'Applying on chain...' : 'Apply for this job'}
+      </button>
+    );
+  };
 
   const fetchNFTCount = useCallback(async (provider: any, address: string) => {
     try {
@@ -118,6 +177,16 @@ const ServiceProviderDashboard: React.FC = () => {
     loadAccount();
   }, [loadAccount, navigate]);
 
+  // Level and completed jobs change when an organizer releases a payment, so keep them fresh.
+  // Only on the dashboard view: reloading the profile resets the Update Profile form.
+  useEffect(() => {
+    if (!account || currentView !== 'dashboard') return;
+    const refresh = () => loadProfileFromBlockchain(getProvider(), account);
+    refresh();
+    const id = setInterval(refresh, 15000);
+    return () => clearInterval(id);
+  }, [account, currentView, loadProfileFromBlockchain]);
+
   const getLevelName = (level: number): string => {
     switch (level) {
       case 3: return 'Expert';
@@ -125,6 +194,16 @@ const ServiceProviderDashboard: React.FC = () => {
       case 1: return 'Beginner';
       default: return 'Unranked';
     }
+  };
+
+  // Mirrors ChainConnectV2._levelFor: level 1 from 0 released jobs, level 2 (Pro) from 3, level 3 (Expert) from 10.
+  const LEVEL_THRESHOLDS = [0, 3, 10];
+  const getLevelProgress = (completed: number) => {
+    const nextLevel = LEVEL_THRESHOLDS.findIndex((t) => t > completed); // index = current level
+    if (nextLevel === -1) return null; // already Expert
+    const from = LEVEL_THRESHOLDS[nextLevel - 1];
+    const to = LEVEL_THRESHOLDS[nextLevel];
+    return { remaining: to - completed, percent: ((completed - from) / (to - from)) * 100, nextName: getLevelName(nextLevel + 1) };
   };
 
   const getColorForLevel = (level: number): string => {
@@ -168,7 +247,7 @@ const ServiceProviderDashboard: React.FC = () => {
         return;
       }
 
-      const signer = await provider.getSigner(account);
+      const signer = await getSignerFor(account);
       const contract = new ethers.Contract(CHAIN_CONNECT_V2_ADDRESS, CHAIN_CONNECT_V2_ABI, signer);
 
       // Register or update vendor on blockchain
@@ -219,7 +298,7 @@ const ServiceProviderDashboard: React.FC = () => {
         return;
       }
 
-      const signer = await provider.getSigner(account);
+      const signer = await getSignerFor(account);
       const contract = new ethers.Contract(CHAIN_CONNECT_V2_ADDRESS, CHAIN_CONNECT_V2_ABI, signer);
 
       const tx = await contract.setVendorStatus(newStatus);
@@ -641,6 +720,22 @@ const ServiceProviderDashboard: React.FC = () => {
                   <div style={{ color: getColorForLevel(profile.level), fontSize: '1.2rem', fontWeight: 'bold' }}>
                     {getLevelName(profile.level)}
                   </div>
+                  {(() => {
+                    const progress = getLevelProgress(profile.completedJobs);
+                    if (!progress) {
+                      return <div style={{ color: 'rgba(255, 255, 255, 0.6)', fontSize: '0.8rem', marginTop: '8px' }}>Top level reached</div>;
+                    }
+                    return (
+                      <>
+                        <div style={{ height: '6px', background: 'rgba(255, 255, 255, 0.1)', borderRadius: '3px', marginTop: '10px', overflow: 'hidden' }}>
+                          <div style={{ width: `${progress.percent}%`, height: '100%', background: getColorForLevel(profile.level + 1), transition: 'width 0.5s' }} />
+                        </div>
+                        <div style={{ color: 'rgba(255, 255, 255, 0.6)', fontSize: '0.8rem', marginTop: '6px' }}>
+                          {progress.remaining} more completed {progress.remaining === 1 ? 'job' : 'jobs'} to {progress.nextName}
+                        </div>
+                      </>
+                    );
+                  })()}
                 </div>
                 <div style={{
                   background: 'rgba(255, 255, 255, 0.05)',
@@ -768,6 +863,10 @@ const ServiceProviderDashboard: React.FC = () => {
               </button>
             )}
           </div>
+
+          {/* Events posted by organizers */}
+          <h2 style={{ color: '#fff', margin: '40px 0 20px', fontSize: '1.5rem' }}>Open Events</h2>
+          <EventList events={events} loading={eventsLoading} error={eventsError} emptyText="No events posted by organizers yet." renderAction={renderApply} />
         </div>
       </div>
     );

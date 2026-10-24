@@ -47,6 +47,24 @@ export async function requestWalletAccounts(): Promise<string[]> {
   return accounts;
 }
 
+// MetaMask only signs for accounts connected to this site, and every wallet_requestPermissions
+// (each Sign In) replaces that list. Signing in as the other role in this browser can therefore
+// disconnect this wallet; if so, re-open MetaMask's account picker instead of failing.
+export async function getSignerFor(account: string) {
+  const ethereum = (window as any).ethereum;
+  if (!ethereum) throw new Error('MetaMask is not installed. Please install it to continue.');
+  const isConnected = async () =>
+    ((await ethereum.request({ method: 'eth_accounts' })) as string[]).some((a) => a.toLowerCase() === account.toLowerCase());
+
+  if (!(await isConnected())) {
+    await ethereum.request({ method: 'wallet_requestPermissions', params: [{ eth_accounts: {} }] });
+    if (!(await isConnected())) {
+      throw new Error(`Wallet ${account} isn't connected to MonConnect. In the MetaMask popup, tick this account (tick your organizer and service-provider accounts together to switch roles freely) and try again.`);
+    }
+  }
+  return getProvider().getSigner(account);
+}
+
 const MONAD_TESTNET = {
   chainId: '0x279F', // 10143
   chainName: 'Monad Testnet',

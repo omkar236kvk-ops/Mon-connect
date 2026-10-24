@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { ethers } from 'ethers';
 import VantaBackground from '../components/VantaBackground';
 import WalletButton from '../components/WalletButton';
-import { getProvider } from '../utils/nft';
+import { getProvider, getSignerFor } from '../utils/nft';
 import { ESCROW_ABI, ESCROW_CONTRACT_ADDRESS, getJobStatusFromNumber } from '../utils/escrow';
 import { FaCheckCircle, FaMoneyBillWave, FaTimes, FaHourglassHalf, FaRocket, FaClipboardCheck, FaFileAlt, FaSync } from 'react-icons/fa';
 
@@ -194,7 +194,7 @@ const ServiceProviderEscrow: React.FC<ServiceProviderEscrowProps> = ({ account, 
       const provider = getProvider();
       if (!provider) throw new Error('Provider not available');
 
-      const signer = await provider.getSigner(account);
+      const signer = await getSignerFor(account);
       const signerAddress = await signer.getAddress();
       if (signerAddress.toLowerCase() !== account.toLowerCase()) {
         throw new Error('The selected wallet changed. Refresh the job list and try again with the assigned service-provider wallet.');
@@ -237,7 +237,7 @@ const ServiceProviderEscrow: React.FC<ServiceProviderEscrowProps> = ({ account, 
       const provider = getProvider();
       if (!provider) throw new Error('Provider not available');
 
-      const signer = await provider.getSigner(account);
+      const signer = await getSignerFor(account);
       const contract = new ethers.Contract(ESCROW_CONTRACT_ADDRESS, ESCROW_ABI, signer);
 
       console.log('Completing job:', jobId);

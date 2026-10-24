@@ -6,7 +6,8 @@
     "compile": "hardhat compile",
     "test": "hardhat test",
     "deploy:local": "hardhat run scripts/deploy.js --network hardhat",
-    "deploy:testnet": "hardhat run scripts/deploy.js --network monadTestnet"
+    "deploy:testnet": "hardhat run scripts/deploy.js --network monadTestnet",
+    "deploy:events": "hardhat run scripts/deploy-events.js --network monadTestnet"
   },
   "devDependencies": {
     "@nomicfoundation/hardhat-toolbox": "^5.0.0",
